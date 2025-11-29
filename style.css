@@ -1,0 +1,157 @@
+body {
+    background-color: #f5f5f5;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    display: flex;
+    gap: 30px;
+    max-width: 1600px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+}
+
+.formulario {
+    flex: 1;
+    min-width: 350px;
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    height: fit-content;
+}
+
+.formulario h1 {
+    margin-top: 0;
+    color: #333;
+    font-size: 24px;
+}
+
+.campo {
+    margin-bottom: 20px;
+}
+
+.campo label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: #333;
+    font-size: 14px;
+}
+
+.campo input[type="text"],
+.campo textarea {
+    width: 100%;
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+    font-family: Arial, sans-serif;
+}
+
+.campo input[type="text"]:focus,
+.campo textarea:focus {
+    outline: none;
+    border-color: #0095f6;
+}
+
+.campo textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.campo input[type="file"] {
+    width: 100%;
+    padding: 8px;
+    border: 2px dashed #ddd;
+    border-radius: 6px;
+    background: #fafafa;
+    cursor: pointer;
+}
+
+.campo small {
+    display: block;
+    margin-top: 5px;
+    color: #666;
+    font-size: 12px;
+}
+
+.btn-gerar,
+.btn-baixar {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+    margin-bottom: 10px;
+    transition: all 0.3s;
+}
+
+.btn-gerar {
+    background-color: #0095f6;
+    color: white;
+}
+
+.btn-gerar:hover {
+    background-color: #0084d4;
+}
+
+.btn-baixar {
+    background-color: #25d366;
+    color: white;
+}
+
+.btn-baixar:hover {
+    background-color: #20ba5a;
+}
+
+.preview {
+    flex: 1;
+    min-width: 400px;
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+#desenho1 {
+    border: 1px solid #ddd;
+    display: block;
+    margin: 0 auto;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    max-width: 100%;
+    height: auto;
+}
+
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column;
+    }
+    
+    .preview {
+        min-width: 100%;
+    }
+    
+    #desenho1 {
+        width: 100%;
+    }
+}
+
+@font-face {
+    font-family: 'Chirp';
+    src: url(Chirp-Font-X-Twitter-main/Chirp\ Regular.woff);
+    font-weight: 400;
+    font-style: normal;
+}
+@font-face {
+    font-family: 'Chirp';
+    src: url(Chirp-Font-X-Twitter-main/Chirp\ Bold.woff);
+    font-weight: 700;
+    font-style: bold;
+}

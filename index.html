@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="formulario">
+            <h1>Gerador de Post Instagram</h1>
+            
+            <div class="campo">
+                <label for="tituloPerfil">Título do Perfil:</label>
+                <input type="text" id="tituloPerfil" placeholder="Ex: Clube Atlético Mineiro" value="Esse tal de Futebol">
+            </div>
+            
+            <div class="campo">
+                <label for="usernamePerfil">Username (@):</label>
+                <input type="text" id="usernamePerfil" placeholder="Ex: taldefutebol" value="taldefutebol">
+            </div>
+            
+            <div class="campo">
+                <label for="imagemPerfil">Imagem do Perfil:</label>
+                <input type="file" id="imagemPerfil" accept="image/*">
+                <small>Ou use: <input type="text" id="imagemPerfilUrl" placeholder="nome-do-arquivo.jpg" value="attmineiro.jpg" style="width: 200px; margin-left: 10px;"></small>
+            </div>
+            
+            <div class="campo">
+                <label for="textoPost">Texto do Post:</label>
+                <textarea id="textoPost" rows="3" placeholder="Digite o texto do post...">POV: voce indo dormir hoje</textarea>
+                <small>Use \n para quebrar linha</small>
+            </div>
+            
+            <div class="campo">
+                <label for="imagemPost">Imagem do Post:</label>
+                <input type="file" id="imagemPost" accept="image/*">
+                <small>Ou use: <input type="text" id="imagemPostUrl" placeholder="nome-do-arquivo.jpg" value="homero.jpg" style="width: 200px; margin-left: 10px;"></small>
+            </div>
+            
+            <button onclick="gerarPost()" class="btn-gerar">🎨 Gerar Post</button>
+            <button onclick="baixarImagem()" class="btn-baixar">💾 Baixar Imagem</button>
+        </div>
+        
+        <div class="preview">
+            <canvas id="desenho1" width="1080" height="1080">
+                <p>Seu navegador não suporta Canvas</p>
+            </canvas>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        var canvas = document.getElementById("desenho1")
+        var contextoDoCanva = canvas.getContext('2d')
+
+        function gerarPost() {
+            // Limpar canvas
+            contextoDoCanva.fillStyle = "#FFF" 
+            contextoDoCanva.fillRect(0, 0, 1080, 1080)
+
+            // Pegar valores dos inputs
+            var tituloPerfil = document.getElementById("tituloPerfil").value || "Título do Perfil"
+            var usernamePerfil = document.getElementById("usernamePerfil").value || "username"
+            var textoPost = document.getElementById("textoPost").value || "Texto do post"
+            var imagemPerfilInput = document.getElementById("imagemPerfil")
+            var imagemPostInput = document.getElementById("imagemPost")
+            var imagemPerfilUrl = document.getElementById("imagemPerfilUrl").value
+            var imagemPostUrl = document.getElementById("imagemPostUrl").value
+
+            // Desenhar textos
+            contextoDoCanva.fillStyle = "#000"
+            contextoDoCanva.font = "bold 60px Chirp"
+            contextoDoCanva.fillText(tituloPerfil, 220, 120)
+
+            // Desenhar username (@)
+            contextoDoCanva.font = "normal 55px Chirp"
+            var textoArroba = "@" + usernamePerfil
+            contextoDoCanva.fillText(textoArroba, 220, 180)
+
+            // Texto do post com quebra de linha
+            contextoDoCanva.font = "normal 55px Chirp"
+            
+            // Função para quebrar texto automaticamente
+            function quebrarTexto(texto, larguraMaxima) {
+                var todasLinhas = []
+                var linhasManuais = texto.split('\n')
+                
+                for (var l = 0; l < linhasManuais.length; l++) {
+                    var linhaManual = linhasManuais[l]
+                    var palavras = linhaManual.split(' ')
+                    var linhaAtual = ''
+                    
+                    for (var i = 0; i < palavras.length; i++) {
+                        var teste = linhaAtual + (linhaAtual ? ' ' : '') + palavras[i]
+                        var largura = contextoDoCanva.measureText(teste).width
+                        
+                        if (largura > larguraMaxima && linhaAtual.length > 0) {
+                            todasLinhas.push(linhaAtual)
+                            linhaAtual = palavras[i]
+                        } else {
+                            linhaAtual = teste
+                        }
+                    }
+                    
+                    if (linhaAtual.length > 0) {
+                        todasLinhas.push(linhaAtual)
+                    }
+                }
+                
+                return todasLinhas
+            }
+            
+            var linhas = quebrarTexto(textoPost, 1000) // largura máxima de 900px
+            var yInicio = 280
+            var espacamentoLinha = 65
+
+            for (var i = 0; i < linhas.length; i++) {
+                contextoDoCanva.fillText(linhas[i], 80, yInicio + (i * espacamentoLinha))
+            }
+
+            // Carregar imagem de perfil
+            var imgPerfil = new Image()
+            imgPerfil.crossOrigin = "anonymous"
+            
+            if (imagemPerfilInput.files && imagemPerfilInput.files[0]) {
+                var reader = new FileReader()
+                reader.onload = function(e) {
+                    imgPerfil.src = e.target.result
+                    desenharImagemPerfil(imgPerfil)
+                }
+                reader.readAsDataURL(imagemPerfilInput.files[0])
+            } else if (imagemPerfilUrl) {
+                imgPerfil.src = imagemPerfilUrl
+                imgPerfil.onload = function() {
+                    desenharImagemPerfil(imgPerfil)
+                }
+            }
+
+            // Carregar imagem do post
+            var imgPost = new Image()
+            imgPost.crossOrigin = "anonymous"
+            
+            if (imagemPostInput.files && imagemPostInput.files[0]) {
+                var reader2 = new FileReader()
+                reader2.onload = function(e) {
+                    imgPost.src = e.target.result
+                    desenharImagemPost(imgPost)
+                }
+                reader2.readAsDataURL(imagemPostInput.files[0])
+            } else if (imagemPostUrl) {
+                imgPost.src = imagemPostUrl
+                imgPost.onload = function() {
+                    desenharImagemPost(imgPost)
+                }
+            }
+        }
+
+        function desenharImagemPerfil(img) {
+            var posicaoY = 60
+            var posicaoX = 50
+
+            contextoDoCanva.save()
+            contextoDoCanva.beginPath()
+            contextoDoCanva.roundRect(posicaoX, posicaoY, 150, 150, 999)
+            contextoDoCanva.clip()
+            contextoDoCanva.drawImage(img, posicaoX, posicaoY, 150, 150)
+            contextoDoCanva.restore()
+        }
+
+        function desenharImagemPost(imgDoPost) {
+            var posicaoDoPostY = 480
+            var posicaoDoPostX = 0
+            var alturaMaxima = 600
+            var larguraMaxima = 1080
+            var alturaMinima = 600
+            var larguraMinima = 600
+
+            // Calcular dimensões mantendo proporção
+            var larguraOriginal = imgDoPost.width
+            var alturaOriginal = imgDoPost.height
+            var proporcao = larguraOriginal / alturaOriginal
+            
+            var novaAltura = alturaOriginal
+            var novaLargura = larguraOriginal
+            
+            // Se a altura passar do máximo, redimensionar baseado na altura
+            if (novaAltura > alturaMaxima) {
+                novaAltura = alturaMaxima
+                novaLargura = alturaMaxima * proporcao
+            }
+            
+            // Se a largura passar do máximo, redimensionar baseado na largura
+            if (novaLargura > larguraMaxima) {
+                novaLargura = larguraMaxima
+                novaAltura = larguraMaxima / proporcao
+            }
+            
+            // Se a altura for menor que o mínimo, redimensionar baseado na altura mínima
+            if (novaAltura < alturaMinima) {
+                novaAltura = alturaMinima
+                novaLargura = alturaMinima * proporcao
+            }
+            
+            // Se a largura for menor que o mínimo, redimensionar baseado na largura mínima
+            if (novaLargura < larguraMinima) {
+                novaLargura = larguraMinima
+                novaAltura = larguraMinima / proporcao
+            }
+            
+            // Verificar novamente os máximos após aplicar mínimos
+            if (novaAltura > alturaMaxima) {
+                novaAltura = alturaMaxima
+                novaLargura = alturaMaxima * proporcao
+            }
+            
+            if (novaLargura > larguraMaxima) {
+                novaLargura = larguraMaxima
+                novaAltura = larguraMaxima / proporcao
+            }
+            
+            // Centralizar a imagem
+            var xCentralizado = (larguraMaxima - novaLargura) / 2
+            var yCentralizado = (alturaMaxima - novaAltura) / 2
+            
+            contextoDoCanva.save()
+            contextoDoCanva.beginPath()
+            contextoDoCanva.roundRect(posicaoDoPostX, posicaoDoPostY, larguraMaxima, alturaMaxima, 0)
+            contextoDoCanva.clip()
+            contextoDoCanva.drawImage(imgDoPost, posicaoDoPostX + xCentralizado, posicaoDoPostY + yCentralizado, novaLargura, novaAltura)
+            contextoDoCanva.restore()
+        }
+
+        function baixarImagem() {
+            var dataURL = canvas.toDataURL('image/png')
+            var link = document.createElement('a')
+            link.download = 'post-instagram.png'
+            link.href = dataURL
+            link.click()
+        }
+
+        // Gerar post ao carregar a página
+        window.onload = function() {
+            gerarPost()
+        }
+    </script>
+</body>
+</html>
