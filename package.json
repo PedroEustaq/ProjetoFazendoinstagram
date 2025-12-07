@@ -1,0 +1,24 @@
+{
+  "name": "instagram-post-generator-api",
+  "version": "1.0.0",
+  "description": "API para gerar posts do Instagram",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": [
+    "instagram",
+    "canvas",
+    "api"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.57",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
