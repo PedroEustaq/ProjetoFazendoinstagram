@@ -288,7 +288,7 @@ app.get('/api/save', async (req, res) => {
             ok: true,
             file: nomeArquivo,
             url: `${baseUrl}/${nomeArquivo}`,
-            expiresInSeconds: 20
+            expiresInSeconds: 200
         });
     } catch (error) {
         console.error('Erro ao salvar imagem:', error);
