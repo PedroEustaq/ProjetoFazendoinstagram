@@ -10,6 +10,9 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Servir arquivos estáticos (imagens, fontes, etc.)
+app.use(express.static(__dirname));
+
 // Registrar fontes Chirp
 const fontPath = path.join(__dirname, 'Chirp-Font-X-Twitter-main');
 try {
