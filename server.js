@@ -260,7 +260,7 @@ app.get('/api/save', async (req, res) => {
         const dados = processarDados(req);
         const imagemBuffer = await gerarImagemPost(dados);
 
-        const nomeArquivo = `post-${Date.now()}.png`;
+        const nomeArquivo = `post-${1}.png`;
         const caminhoArquivo = path.join(__dirname, nomeArquivo);
 
         fs.writeFileSync(caminhoArquivo, imagemBuffer);
