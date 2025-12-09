@@ -6,6 +6,9 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Necessário em ambientes com proxy (Render, etc.) para ler protocolo/host corretos
+app.set('trust proxy', 1);
+
 // Middleware para parse JSON
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -260,7 +263,7 @@ app.get('/api/save', async (req, res) => {
         const dados = processarDados(req);
         const imagemBuffer = await gerarImagemPost(dados);
 
-        const nomeArquivo = `post-${1}.png`;
+        const nomeArquivo = `post-${Date.now()}.png`;
         const caminhoArquivo = path.join(__dirname, nomeArquivo);
 
         fs.writeFileSync(caminhoArquivo, imagemBuffer);
@@ -276,10 +279,15 @@ app.get('/api/save', async (req, res) => {
             });
         }, 20_000);
 
+        // Monta URL pública usando host/protocolo reais (proxy-friendly)
+        const host = req.get('host');
+        const protocol = req.protocol;
+        const baseUrl = process.env.PUBLIC_URL || `${protocol}://${host}`;
+
         res.json({
             ok: true,
             file: nomeArquivo,
-            url: `http://localhost:${PORT}/${nomeArquivo}`,
+            url: `${baseUrl}/${nomeArquivo}`,
             expiresInSeconds: 20
         });
     } catch (error) {
