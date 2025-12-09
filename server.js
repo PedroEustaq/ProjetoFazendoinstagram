@@ -254,6 +254,43 @@ app.get('/api/generate', async (req, res) => {
     }
 });
 
+// Rota para gerar, salvar e remover a imagem após 20 segundos
+app.get('/api/save', async (req, res) => {
+    try {
+        const dados = processarDados(req);
+        const imagemBuffer = await gerarImagemPost(dados);
+
+        const nomeArquivo = `post-${Date.now()}.png`;
+        const caminhoArquivo = path.join(__dirname, nomeArquivo);
+
+        fs.writeFileSync(caminhoArquivo, imagemBuffer);
+
+        // Agenda remoção do arquivo após 20s (não bloqueia a resposta)
+        setTimeout(() => {
+            fs.unlink(caminhoArquivo, (err) => {
+                if (err) {
+                    console.warn(`Não foi possível remover ${nomeArquivo}:`, err.message);
+                } else {
+                    console.log(`Imagem removida: ${nomeArquivo}`);
+                }
+            });
+        }, 20_000);
+
+        res.json({
+            ok: true,
+            file: nomeArquivo,
+            url: `http://localhost:${PORT}/${nomeArquivo}`,
+            expiresInSeconds: 20
+        });
+    } catch (error) {
+        console.error('Erro ao salvar imagem:', error);
+        res.status(500).json({ 
+            error: 'Erro ao salvar imagem',
+            message: error.message 
+        });
+    }
+});
+
 // Rota de documentação
 app.get('/', (req, res) => {
     res.send(`
