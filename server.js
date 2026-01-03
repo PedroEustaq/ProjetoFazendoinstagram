@@ -428,7 +428,7 @@ app.get('/api/video', async (req, res) => {
             ok: true,
             file: nomeVideo,
             url: `${baseUrl}/${nomeVideo}`,
-            expiresInSeconds: 200
+            expiresInSeconds: 20000
         });
     } catch (error) {
         console.error('Erro ao gerar vídeo:', error);
