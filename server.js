@@ -326,5 +326,6 @@ app.listen(PORT, () => {
     console.log(`🚀 Servidor rodando na porta ${PORT}`);
     console.log(`📝 Documentação: http://localhost:${PORT}`);
     console.log(`🎨 API: http://localhost:${PORT}/api/generate`);
+    console.log("api/save");
 });
 
