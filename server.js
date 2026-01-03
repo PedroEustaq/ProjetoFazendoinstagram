@@ -4,9 +4,58 @@ const fs = require('fs');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+const { execSync } = require('child_process');
 
 // Configurar caminho do FFmpeg
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+let ffmpegPath = null;
+let ffmpegDisponivel = false;
+
+try {
+    ffmpegPath = ffmpegInstaller.path;
+    ffmpeg.setFfmpegPath(ffmpegPath);
+    
+    // Verificar se o FFmpeg está realmente disponível
+    try {
+        execSync(`"${ffmpegPath}" -version`, { stdio: 'ignore', timeout: 5000 });
+        ffmpegDisponivel = true;
+        console.log('✅ FFmpeg disponível:', ffmpegPath);
+    } catch (error) {
+        console.warn('⚠️ FFmpeg não está disponível no caminho padrão, tentando encontrar...');
+        // Tentar encontrar FFmpeg no sistema
+        try {
+            let systemFfmpeg = null;
+            // Tentar 'which' (Linux/Mac)
+            try {
+                systemFfmpeg = execSync('which ffmpeg', { encoding: 'utf-8', timeout: 2000 }).trim();
+            } catch (e) {
+                // Tentar 'where' (Windows)
+                try {
+                    systemFfmpeg = execSync('where ffmpeg', { encoding: 'utf-8', timeout: 2000, shell: true }).trim().split('\n')[0];
+                } catch (e2) {
+                    // Ignorar
+                }
+            }
+            
+            if (systemFfmpeg && systemFfmpeg.length > 0) {
+                ffmpegPath = systemFfmpeg;
+                ffmpeg.setFfmpegPath(ffmpegPath);
+                // Verificar novamente se funciona
+                try {
+                    execSync(`"${ffmpegPath}" -version`, { stdio: 'ignore', timeout: 5000 });
+                    ffmpegDisponivel = true;
+                    console.log('✅ FFmpeg encontrado no sistema:', ffmpegPath);
+                } catch (e) {
+                    console.warn('⚠️ FFmpeg encontrado mas não está funcionando');
+                }
+            }
+        } catch (e) {
+            console.error('❌ FFmpeg não encontrado no sistema');
+        }
+    }
+} catch (error) {
+    console.error('❌ Erro ao configurar FFmpeg:', error.message);
+    console.warn('⚠️ A geração de vídeo pode não funcionar. Verifique se o FFmpeg está instalado.');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -237,6 +286,25 @@ async function gerarCanvasTikTok(imagemBuffer) {
 // Função para gerar vídeo TikTok de 20 segundos
 function gerarVideoTikTok(imagemPath, outputPath) {
     return new Promise((resolve, reject) => {
+        if (!ffmpegDisponivel) {
+            const error = new Error('FFmpeg não está disponível. A geração de vídeo requer FFmpeg instalado.');
+            console.error('❌', error.message);
+            reject(error);
+            return;
+        }
+
+        // Verificar se o arquivo de imagem existe
+        if (!fs.existsSync(imagemPath)) {
+            const error = new Error(`Arquivo de imagem não encontrado: ${imagemPath}`);
+            console.error('❌', error.message);
+            reject(error);
+            return;
+        }
+
+        console.log('🎬 Iniciando geração de vídeo...');
+        console.log('   Input:', imagemPath);
+        console.log('   Output:', outputPath);
+
         ffmpeg()
             .input(imagemPath)
             .inputOptions([
@@ -248,15 +316,36 @@ function gerarVideoTikTok(imagemPath, outputPath) {
                 '-pix_fmt', 'yuv420p',
                 '-c:v', 'libx264',
                 '-preset', 'medium',
-                '-crf', '23'
+                '-crf', '23',
+                '-movflags', '+faststart' // Otimização para web
             ])
             .output(outputPath)
+            .on('start', (commandLine) => {
+                console.log('📹 Comando FFmpeg:', commandLine);
+            })
+            .on('progress', (progress) => {
+                if (progress.percent) {
+                    console.log(`⏳ Progresso: ${Math.round(progress.percent)}%`);
+                }
+            })
             .on('end', () => {
-                console.log('Vídeo gerado com sucesso:', outputPath);
-                resolve(outputPath);
+                // Verificar se o arquivo foi criado
+                if (fs.existsSync(outputPath)) {
+                    const stats = fs.statSync(outputPath);
+                    console.log('✅ Vídeo gerado com sucesso:', outputPath);
+                    console.log('   Tamanho:', (stats.size / 1024 / 1024).toFixed(2), 'MB');
+                    resolve(outputPath);
+                } else {
+                    const error = new Error('Vídeo não foi criado, mas o processo terminou sem erros');
+                    console.error('❌', error.message);
+                    reject(error);
+                }
             })
             .on('error', (err) => {
-                console.error('Erro ao gerar vídeo:', err);
+                console.error('❌ Erro ao gerar vídeo:', err.message);
+                if (err.message.includes('ffmpeg')) {
+                    console.error('   Verifique se o FFmpeg está instalado e acessível');
+                }
                 reject(err);
             })
             .run();
@@ -334,19 +423,25 @@ app.get('/api/save', async (req, res) => {
         const nomeVideo = `tiktok-${timestamp}.mp4`;
         const caminhoVideo = path.join(__dirname, nomeVideo);
 
-        // Gerar vídeo de forma assíncrona (não bloqueia a resposta)
-        gerarVideoTikTok(caminhoArquivoTikTok, caminhoVideo)
-            .then(() => {
-                // Agenda remoção do arquivo de imagem TikTok após 20s
-                setTimeout(() => {
-                    fs.unlink(caminhoArquivoTikTok, (err) => {
-                        if (err) console.warn(`Não foi possível remover ${nomeArquivoTikTok}:`, err.message);
-                    });
-                }, 20_000);
-            })
-            .catch((err) => {
-                console.error('Erro ao gerar vídeo:', err);
-            });
+        // Gerar vídeo (aguardar conclusão antes de responder)
+        let videoGerado = false;
+        let erroVideo = null;
+        
+        try {
+            await gerarVideoTikTok(caminhoArquivoTikTok, caminhoVideo);
+            videoGerado = true;
+            
+            // Agenda remoção do arquivo de imagem TikTok após 20s
+            setTimeout(() => {
+                fs.unlink(caminhoArquivoTikTok, (err) => {
+                    if (err) console.warn(`Não foi possível remover ${nomeArquivoTikTok}:`, err.message);
+                });
+            }, 20_000);
+        } catch (err) {
+            console.error('❌ Erro ao gerar vídeo:', err.message);
+            erroVideo = err.message;
+            // Continuar mesmo se o vídeo falhar
+        }
 
         // Agenda remoção dos arquivos após 20s (não bloqueia a resposta)
         setTimeout(() => {
@@ -371,18 +466,27 @@ app.get('/api/save', async (req, res) => {
         const protocol = req.protocol;
         const baseUrl = process.env.PUBLIC_URL || `${protocol}://${host}`;
 
-        res.json({
+        const resposta = {
             ok: true,
             image: {
                 file: nomeArquivo,
                 url: `${baseUrl}/${nomeArquivo}`
             },
-            video: {
+            expiresInSeconds: 200
+        };
+
+        if (videoGerado && fs.existsSync(caminhoVideo)) {
+            resposta.video = {
                 file: nomeVideo,
                 url: `${baseUrl}/${nomeVideo}`
-            },
-            expiresInSeconds: 200
-        });
+            };
+        } else {
+            resposta.video = null;
+            resposta.videoError = erroVideo || 'Vídeo não foi gerado';
+            console.warn('⚠️ Vídeo não disponível na resposta');
+        }
+
+        res.json(resposta);
     } catch (error) {
         console.error('Erro ao salvar imagem:', error);
         res.status(500).json({ 
@@ -408,28 +512,38 @@ app.get('/api/video', async (req, res) => {
         const nomeVideo = `tiktok-${timestamp}.mp4`;
         const caminhoVideo = path.join(__dirname, nomeVideo);
 
-        await gerarVideoTikTok(caminhoArquivoTikTok, caminhoVideo);
+        try {
+            await gerarVideoTikTok(caminhoArquivoTikTok, caminhoVideo);
 
-        // Agenda remoção dos arquivos após 20s
-        setTimeout(() => {
-            fs.unlink(caminhoArquivoTikTok, (err) => {
-                if (err) console.warn(`Não foi possível remover ${nomeArquivoTikTok}:`, err.message);
+            // Agenda remoção dos arquivos após 20s
+            setTimeout(() => {
+                fs.unlink(caminhoArquivoTikTok, (err) => {
+                    if (err) console.warn(`Não foi possível remover ${nomeArquivoTikTok}:`, err.message);
+                });
+                fs.unlink(caminhoVideo, (err) => {
+                    if (err) console.warn(`Não foi possível remover ${nomeVideo}:`, err.message);
+                });
+            }, 20_000);
+
+            const host = req.get('host');
+            const protocol = req.protocol;
+            const baseUrl = process.env.PUBLIC_URL || `${protocol}://${host}`;
+
+            res.json({
+                ok: true,
+                file: nomeVideo,
+                url: `${baseUrl}/${nomeVideo}`,
+                expiresInSeconds: 200
             });
-            fs.unlink(caminhoVideo, (err) => {
-                if (err) console.warn(`Não foi possível remover ${nomeVideo}:`, err.message);
+        } catch (error) {
+            console.error('❌ Erro ao gerar vídeo na rota /api/video:', error.message);
+            res.status(500).json({
+                ok: false,
+                error: 'Erro ao gerar vídeo',
+                message: error.message,
+                ffmpegAvailable: ffmpegDisponivel
             });
-        }, 20_000);
-
-        const host = req.get('host');
-        const protocol = req.protocol;
-        const baseUrl = process.env.PUBLIC_URL || `${protocol}://${host}`;
-
-        res.json({
-            ok: true,
-            file: nomeVideo,
-            url: `${baseUrl}/${nomeVideo}`,
-            expiresInSeconds: 20000
-        });
+        }
     } catch (error) {
         console.error('Erro ao gerar vídeo:', error);
         res.status(500).json({ 

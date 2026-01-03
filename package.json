@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "build": "chmod +x build.sh && ./build.sh || npm install"
   },
   "keywords": [
     "instagram",
