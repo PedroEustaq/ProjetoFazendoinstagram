@@ -383,6 +383,105 @@ function processarDados(req) {
     return dados;
 }
 
+// Rota para servir imagem binária
+app.get('/api/image/:filename', (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const filePath = path.join(__dirname, filename);
+        
+        // Verificar se o arquivo existe
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Arquivo não encontrado' });
+        }
+        
+        // Verificar se é um arquivo de imagem válido
+        if (!filename.match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
+            return res.status(400).json({ error: 'Tipo de arquivo inválido' });
+        }
+        
+        // Determinar content-type
+        const ext = path.extname(filename).toLowerCase();
+        const contentTypes = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.webp': 'image/webp'
+        };
+        
+        res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+        res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+        
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+        
+    } catch (error) {
+        console.error('Erro ao servir imagem:', error);
+        res.status(500).json({ error: 'Erro ao servir imagem', message: error.message });
+    }
+});
+
+// Rota para servir vídeo binário
+app.get('/api/video/:filename', (req, res) => {
+    try {
+        const filename = req.params.filename;
+        const filePath = path.join(__dirname, filename);
+        
+        // Verificar se o arquivo existe
+        if (!fs.existsSync(filePath)) {
+            return res.status(404).json({ error: 'Arquivo não encontrado' });
+        }
+        
+        // Verificar se é um arquivo de vídeo válido
+        if (!filename.match(/\.(mp4|webm|mov|avi)$/i)) {
+            return res.status(400).json({ error: 'Tipo de arquivo inválido' });
+        }
+        
+        // Determinar content-type
+        const ext = path.extname(filename).toLowerCase();
+        const contentTypes = {
+            '.mp4': 'video/mp4',
+            '.webm': 'video/webm',
+            '.mov': 'video/quicktime',
+            '.avi': 'video/x-msvideo'
+        };
+        
+        const stats = fs.statSync(filePath);
+        const fileSize = stats.size;
+        const range = req.headers.range;
+        
+        if (range) {
+            // Suporte a range requests para streaming de vídeo
+            const parts = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+            const chunksize = (end - start) + 1;
+            const file = fs.createReadStream(filePath, { start, end });
+            const head = {
+                'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunksize,
+                'Content-Type': contentTypes[ext] || 'video/mp4',
+            };
+            res.writeHead(206, head);
+            file.pipe(res);
+        } else {
+            // Enviar arquivo completo
+            res.setHeader('Content-Type', contentTypes[ext] || 'video/mp4');
+            res.setHeader('Content-Length', fileSize);
+            res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+            res.setHeader('Accept-Ranges', 'bytes');
+            
+            const fileStream = fs.createReadStream(filePath);
+            fileStream.pipe(res);
+        }
+        
+    } catch (error) {
+        console.error('Erro ao servir vídeo:', error);
+        res.status(500).json({ error: 'Erro ao servir vídeo', message: error.message });
+    }
+});
+
 // Rota da API - GET
 app.get('/api/generate', async (req, res) => {
     try {
@@ -470,7 +569,9 @@ app.get('/api/save', async (req, res) => {
             ok: true,
             image: {
                 file: nomeArquivo,
-                url: `${baseUrl}/${nomeArquivo}`
+                url: `${baseUrl}/${nomeArquivo}`,
+                downloadUrl: `${baseUrl}/api/image/${nomeArquivo}`,
+                binaryUrl: `${baseUrl}/api/image/${nomeArquivo}`
             },
             expiresInSeconds: 200
         };
@@ -478,7 +579,9 @@ app.get('/api/save', async (req, res) => {
         if (videoGerado && fs.existsSync(caminhoVideo)) {
             resposta.video = {
                 file: nomeVideo,
-                url: `${baseUrl}/${nomeVideo}`
+                url: `${baseUrl}/${nomeVideo}`,
+                downloadUrl: `${baseUrl}/api/video/${nomeVideo}`,
+                binaryUrl: `${baseUrl}/api/video/${nomeVideo}`
             };
         } else {
             resposta.video = null;
@@ -533,6 +636,8 @@ app.get('/api/video', async (req, res) => {
                 ok: true,
                 file: nomeVideo,
                 url: `${baseUrl}/${nomeVideo}`,
+                downloadUrl: `${baseUrl}/api/video/${nomeVideo}`,
+                binaryUrl: `${baseUrl}/api/video/${nomeVideo}`,
                 expiresInSeconds: 200
             });
         } catch (error) {
@@ -559,9 +664,11 @@ app.get('/', (req, res) => {
         <h1>API Gerador de Post Instagram e TikTok</h1>
         <h2>Rotas disponíveis:</h2>
         <ul>
-            <li><strong>GET /api/generate</strong> - Gera apenas a imagem do post Instagram (1080x1080)</li>
-            <li><strong>GET /api/save</strong> - Gera e salva a imagem Instagram + vídeo TikTok (1080x1980, 20s)</li>
-            <li><strong>GET /api/video</strong> - Gera apenas o vídeo TikTok (1080x1980, 20s)</li>
+            <li><strong>GET /api/generate</strong> - Gera apenas a imagem do post Instagram (1080x1080) - retorna binário</li>
+            <li><strong>GET /api/save</strong> - Gera e salva a imagem Instagram + vídeo TikTok (1080x1980, 20s) - retorna JSON com URLs</li>
+            <li><strong>GET /api/video</strong> - Gera apenas o vídeo TikTok (1080x1980, 20s) - retorna JSON com URL</li>
+            <li><strong>GET /api/image/:filename</strong> - Retorna arquivo binário da imagem</li>
+            <li><strong>GET /api/video/:filename</strong> - Retorna arquivo binário do vídeo (com suporte a streaming)</li>
         </ul>
         <h2>Parâmetros (Query String):</h2>
         <ul>
@@ -579,8 +686,34 @@ http://localhost:3000/api/generate?tituloPerfil=Clube%20Atletico%20Mineiro&usern
         <pre>
 http://localhost:3000/api/save?tituloPerfil=Clube%20Atletico%20Mineiro&usernamePerfil=atletico&textoPost=Meu%20post%20aqui&imagemPerfil=attmineiro.jpg&imagemPost=homero.jpg
         </pre>
+        <h3>Download de Arquivos Binários:</h3>
+        <p>Além das URLs padrão, você pode baixar os arquivos binários diretamente:</p>
+        <ul>
+            <li><strong>/api/image/:filename</strong> - Retorna a imagem como binário (PNG, JPG, etc.)</li>
+            <li><strong>/api/video/:filename</strong> - Retorna o vídeo como binário (MP4) com suporte a streaming (range requests)</li>
+        </ul>
+        <p><strong>Exemplo de resposta do /api/save:</strong></p>
+        <pre>
+{
+  "ok": true,
+  "image": {
+    "file": "post-1234567890.png",
+    "url": "https://seu-app.com/post-1234567890.png",
+    "downloadUrl": "https://seu-app.com/api/image/post-1234567890.png",
+    "binaryUrl": "https://seu-app.com/api/image/post-1234567890.png"
+  },
+  "video": {
+    "file": "tiktok-1234567890.mp4",
+    "url": "https://seu-app.com/tiktok-1234567890.mp4",
+    "downloadUrl": "https://seu-app.com/api/video/tiktok-1234567890.mp4",
+    "binaryUrl": "https://seu-app.com/api/video/tiktok-1234567890.mp4"
+  },
+  "expiresInSeconds": 200
+}
+        </pre>
         <h3>Compatível com n8n:</h3>
         <p>Use o nó HTTP Request com método GET e configure os parâmetros na URL ou use "Specify Parameters" no n8n.</p>
+        <p>Para baixar arquivos binários, use as URLs <code>downloadUrl</code> ou <code>binaryUrl</code> retornadas na resposta.</p>
         <p><strong>Nota:</strong> Os arquivos gerados são removidos automaticamente após 20 segundos.</p>
     `);
 });
