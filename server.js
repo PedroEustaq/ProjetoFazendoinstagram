@@ -2,6 +2,11 @@ const express = require('express');
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const fs = require('fs');
 const path = require('path');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+
+// Configurar caminho do FFmpeg
+ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -207,6 +212,57 @@ async function gerarImagemPost(dados) {
     return canvas.toBuffer('image/png');
 }
 
+// Função para gerar canvas portrait TikTok (1080x1980) com imagem centralizada
+async function gerarCanvasTikTok(imagemBuffer) {
+    const canvas = createCanvas(1080, 1980);
+    const ctx = canvas.getContext('2d');
+    
+    // Fundo branco
+    ctx.fillStyle = '#FFF';
+    ctx.fillRect(0, 0, 1080, 1980);
+    
+    // Carregar a imagem gerada
+    const img = await loadImage(imagemBuffer);
+    
+    // Calcular posição para centralizar a imagem
+    // A imagem original é 1080x1080, vamos centralizar verticalmente
+    const x = (1080 - img.width) / 2;
+    const y = (1980 - img.height) / 2;
+    
+    ctx.drawImage(img, x, y, img.width, img.height);
+    
+    return canvas.toBuffer('image/png');
+}
+
+// Função para gerar vídeo TikTok de 20 segundos
+function gerarVideoTikTok(imagemPath, outputPath) {
+    return new Promise((resolve, reject) => {
+        ffmpeg()
+            .input(imagemPath)
+            .inputOptions([
+                '-loop', '1',
+                '-framerate', '1'
+            ])
+            .outputOptions([
+                '-t', '20', // Duração de 20 segundos
+                '-pix_fmt', 'yuv420p',
+                '-c:v', 'libx264',
+                '-preset', 'medium',
+                '-crf', '23'
+            ])
+            .output(outputPath)
+            .on('end', () => {
+                console.log('Vídeo gerado com sucesso:', outputPath);
+                resolve(outputPath);
+            })
+            .on('error', (err) => {
+                console.error('Erro ao gerar vídeo:', err);
+                reject(err);
+            })
+            .run();
+    });
+}
+
 // Função auxiliar para processar dados GET
 function processarDados(req) {
     const query = req.query;
@@ -263,18 +319,49 @@ app.get('/api/save', async (req, res) => {
         const dados = processarDados(req);
         const imagemBuffer = await gerarImagemPost(dados);
 
-        const nomeArquivo = `post-${Date.now()}.png`;
+        const timestamp = Date.now();
+        const nomeArquivo = `post-${timestamp}.png`;
         const caminhoArquivo = path.join(__dirname, nomeArquivo);
 
         fs.writeFileSync(caminhoArquivo, imagemBuffer);
 
-        // Agenda remoção do arquivo após 20s (não bloqueia a resposta)
+        // Gerar canvas TikTok e vídeo
+        const canvasTikTokBuffer = await gerarCanvasTikTok(imagemBuffer);
+        const nomeArquivoTikTok = `tiktok-${timestamp}.png`;
+        const caminhoArquivoTikTok = path.join(__dirname, nomeArquivoTikTok);
+        fs.writeFileSync(caminhoArquivoTikTok, canvasTikTokBuffer);
+
+        const nomeVideo = `tiktok-${timestamp}.mp4`;
+        const caminhoVideo = path.join(__dirname, nomeVideo);
+
+        // Gerar vídeo de forma assíncrona (não bloqueia a resposta)
+        gerarVideoTikTok(caminhoArquivoTikTok, caminhoVideo)
+            .then(() => {
+                // Agenda remoção do arquivo de imagem TikTok após 20s
+                setTimeout(() => {
+                    fs.unlink(caminhoArquivoTikTok, (err) => {
+                        if (err) console.warn(`Não foi possível remover ${nomeArquivoTikTok}:`, err.message);
+                    });
+                }, 20_000);
+            })
+            .catch((err) => {
+                console.error('Erro ao gerar vídeo:', err);
+            });
+
+        // Agenda remoção dos arquivos após 20s (não bloqueia a resposta)
         setTimeout(() => {
             fs.unlink(caminhoArquivo, (err) => {
                 if (err) {
                     console.warn(`Não foi possível remover ${nomeArquivo}:`, err.message);
                 } else {
                     console.log(`Imagem removida: ${nomeArquivo}`);
+                }
+            });
+            fs.unlink(caminhoVideo, (err) => {
+                if (err) {
+                    console.warn(`Não foi possível remover ${nomeVideo}:`, err.message);
+                } else {
+                    console.log(`Vídeo removido: ${nomeVideo}`);
                 }
             });
         }, 20_000);
@@ -286,8 +373,14 @@ app.get('/api/save', async (req, res) => {
 
         res.json({
             ok: true,
-            file: nomeArquivo,
-            url: `${baseUrl}/${nomeArquivo}`,
+            image: {
+                file: nomeArquivo,
+                url: `${baseUrl}/${nomeArquivo}`
+            },
+            video: {
+                file: nomeVideo,
+                url: `${baseUrl}/${nomeVideo}`
+            },
             expiresInSeconds: 200
         });
     } catch (error) {
@@ -299,13 +392,64 @@ app.get('/api/save', async (req, res) => {
     }
 });
 
+// Rota para gerar apenas o vídeo TikTok
+app.get('/api/video', async (req, res) => {
+    try {
+        const dados = processarDados(req);
+        const imagemBuffer = await gerarImagemPost(dados);
+
+        const timestamp = Date.now();
+        const nomeArquivoTikTok = `tiktok-${timestamp}.png`;
+        const caminhoArquivoTikTok = path.join(__dirname, nomeArquivoTikTok);
+        
+        const canvasTikTokBuffer = await gerarCanvasTikTok(imagemBuffer);
+        fs.writeFileSync(caminhoArquivoTikTok, canvasTikTokBuffer);
+
+        const nomeVideo = `tiktok-${timestamp}.mp4`;
+        const caminhoVideo = path.join(__dirname, nomeVideo);
+
+        await gerarVideoTikTok(caminhoArquivoTikTok, caminhoVideo);
+
+        // Agenda remoção dos arquivos após 20s
+        setTimeout(() => {
+            fs.unlink(caminhoArquivoTikTok, (err) => {
+                if (err) console.warn(`Não foi possível remover ${nomeArquivoTikTok}:`, err.message);
+            });
+            fs.unlink(caminhoVideo, (err) => {
+                if (err) console.warn(`Não foi possível remover ${nomeVideo}:`, err.message);
+            });
+        }, 20_000);
+
+        const host = req.get('host');
+        const protocol = req.protocol;
+        const baseUrl = process.env.PUBLIC_URL || `${protocol}://${host}`;
+
+        res.json({
+            ok: true,
+            file: nomeVideo,
+            url: `${baseUrl}/${nomeVideo}`,
+            expiresInSeconds: 200
+        });
+    } catch (error) {
+        console.error('Erro ao gerar vídeo:', error);
+        res.status(500).json({ 
+            error: 'Erro ao gerar vídeo',
+            message: error.message 
+        });
+    }
+});
+
 // Rota de documentação
 app.get('/', (req, res) => {
     res.send(`
-        <h1>API Gerador de Post Instagram</h1>
-        <h2>Uso:</h2>
-        <p><strong>GET /api/generate</strong></p>
-        <h3>Parâmetros (Query String):</h3>
+        <h1>API Gerador de Post Instagram e TikTok</h1>
+        <h2>Rotas disponíveis:</h2>
+        <ul>
+            <li><strong>GET /api/generate</strong> - Gera apenas a imagem do post Instagram (1080x1080)</li>
+            <li><strong>GET /api/save</strong> - Gera e salva a imagem Instagram + vídeo TikTok (1080x1980, 20s)</li>
+            <li><strong>GET /api/video</strong> - Gera apenas o vídeo TikTok (1080x1980, 20s)</li>
+        </ul>
+        <h2>Parâmetros (Query String):</h2>
         <ul>
             <li><strong>tituloPerfil</strong> ou <strong>titulo</strong>: Título do perfil</li>
             <li><strong>usernamePerfil</strong> ou <strong>username</strong>: Username (sem @)</li>
@@ -313,12 +457,17 @@ app.get('/', (req, res) => {
             <li><strong>imagemPerfil</strong> ou <strong>imgPerfil</strong>: Caminho da imagem de perfil (local ou URL)</li>
             <li><strong>imagemPost</strong> ou <strong>imgPost</strong>: Caminho da imagem do post (local ou URL)</li>
         </ul>
-        <h3>Exemplo:</h3>
+        <h3>Exemplo - Gerar imagem:</h3>
         <pre>
 http://localhost:3000/api/generate?tituloPerfil=Clube%20Atletico%20Mineiro&usernamePerfil=atletico&textoPost=Meu%20post%20aqui%0ASegunda%20linha&imagemPerfil=attmineiro.jpg&imagemPost=homero.jpg
         </pre>
+        <h3>Exemplo - Gerar imagem + vídeo TikTok:</h3>
+        <pre>
+http://localhost:3000/api/save?tituloPerfil=Clube%20Atletico%20Mineiro&usernamePerfil=atletico&textoPost=Meu%20post%20aqui&imagemPerfil=attmineiro.jpg&imagemPost=homero.jpg
+        </pre>
         <h3>Compatível com n8n:</h3>
         <p>Use o nó HTTP Request com método GET e configure os parâmetros na URL ou use "Specify Parameters" no n8n.</p>
+        <p><strong>Nota:</strong> Os arquivos gerados são removidos automaticamente após 20 segundos.</p>
     `);
 });
 
